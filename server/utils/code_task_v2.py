@@ -142,20 +142,38 @@ def _run_ai_code_task_v2_internal(task_id: int, user_id: str, github_token: str)
         
         # Add model-specific API keys and environment variables
         model_cli = task.get('agent', 'claude')
+        
+        # Get user preferences for custom environment variables
+        user = DatabaseOperations.get_user_by_id(user_id)
+        user_preferences = user.get('preferences', {}) if user else {}
+        
+        if user_preferences:
+            logger.info(f"🔧 Found user preferences for {model_cli}: {list(user_preferences.keys())}")
+        
         if model_cli == 'claude':
-            env_vars.update({
+            # Start with default Claude environment
+            claude_env = {
                 'ANTHROPIC_API_KEY': os.getenv('ANTHROPIC_API_KEY'),
                 'ANTHROPIC_NONINTERACTIVE': '1'  # Custom flag for Anthropic tools
-            })
+            }
+            # Merge with user's custom Claude environment variables
+            if user_preferences.get('claudeCode'):
+                claude_env.update(user_preferences['claudeCode'])
+            env_vars.update(claude_env)
         elif model_cli == 'codex':
-            env_vars.update({
+            # Start with default Codex environment
+            codex_env = {
                 'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
                 'OPENAI_NONINTERACTIVE': '1',  # Custom flag for OpenAI tools
                 'CODEX_QUIET_MODE': '1',  # Official Codex non-interactive flag
                 'CODEX_UNSAFE_ALLOW_NO_SANDBOX': '1',  # Disable Codex internal sandboxing to prevent Docker conflicts
                 'CODEX_DISABLE_SANDBOX': '1',  # Alternative sandbox disable flag
                 'CODEX_NO_SANDBOX': '1'  # Another potential sandbox disable flag
-            })
+            }
+            # Merge with user's custom Codex environment variables
+            if user_preferences.get('codexCLI'):
+                codex_env.update(user_preferences['codexCLI'])
+            env_vars.update(codex_env)
         
         # Use specialized container images based on model
         if model_cli == 'codex':
@@ -185,6 +203,33 @@ def _run_ai_code_task_v2_internal(task_id: int, user_id: str, github_token: str)
                 logger.info(f"🕐 Adding additional {additional_delay:.1f}s delay due to lock conflict")
                 time.sleep(additional_delay)
         
+        # Load Claude credentials from user preferences in Supabase
+        credentials_content = ""
+        escaped_credentials = ""
+        if model_cli == 'claude':
+            logger.info(f"🔍 Looking for Claude credentials in user preferences for task {task_id}")
+            
+            # Check if user has Claude credentials in their preferences
+            claude_preferences = user_preferences.get('claudeCode', {})
+            if claude_preferences and 'credentials' in claude_preferences:
+                try:
+                    credentials_json = claude_preferences['credentials']
+                    if credentials_json:
+                        # Convert JSON object to string for writing to container
+                        credentials_content = json.dumps(credentials_json)
+                        logger.info(f"📋 Successfully loaded Claude credentials from user preferences and stringified ({len(credentials_content)} characters) for task {task_id}")
+                        # Escape credentials content for shell
+                        escaped_credentials = credentials_content.replace("'", "'\"'\"'").replace('\n', '\\n')
+                        logger.info(f"📋 Credentials content escaped for shell injection")
+                    else:
+                        logger.warning(f"⚠️  Claude credentials field exists but is empty in user preferences for task {task_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to process Claude credentials from user preferences: {e}")
+                    credentials_content = ""
+                    escaped_credentials = ""
+            else:
+                logger.info(f"ℹ️  No Claude credentials found in user preferences for task {task_id} - skipping credentials setup")
+        
         # Create the command to run in container (v2 function)
         container_command = f'''
 set -e
@@ -203,8 +248,29 @@ echo "📋 Will extract changes as patch for later PR creation..."
 
 echo "Starting {model_cli.upper()} Code with prompt..."
 
-# Create a temporary file with the prompt
-echo "{escaped_prompt}" > /tmp/prompt.txt
+# Create a temporary file with the prompt using heredoc for proper handling
+cat << 'PROMPT_EOF' > /tmp/prompt.txt
+{prompt}
+PROMPT_EOF
+
+# Setup Claude credentials for Claude tasks
+if [ "{model_cli}" = "claude" ]; then
+    echo "Setting up Claude credentials..."
+    
+    # Create ~/.claude directory if it doesn't exist
+    mkdir -p ~/.claude
+    
+    # Write credentials content directly to file
+    if [ ! -z '{escaped_credentials}' ]; then
+        echo "📋 Writing credentials to ~/.claude/.credentials.json"
+        cat << 'CREDENTIALS_EOF' > ~/.claude/.credentials.json
+{credentials_content}
+CREDENTIALS_EOF
+        echo "✅ Claude credentials configured"
+    else
+        echo "⚠️  No credentials content available"
+    fi
+fi
 
 # Check which CLI tool to use based on model selection
 if [ "{model_cli}" = "codex" ]; then
