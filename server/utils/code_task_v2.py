@@ -157,8 +157,9 @@ def _run_ai_code_task_v2_internal(task_id: int, user_id: str, github_token: str)
                 'ANTHROPIC_NONINTERACTIVE': '1'  # Custom flag for Anthropic tools
             }
             # Merge with user's custom Claude environment variables
-            if user_preferences.get('claudeCode'):
-                claude_env.update(user_preferences['claudeCode'])
+            claude_config = user_preferences.get('claudeCode', {})
+            if claude_config and claude_config.get('env'):
+                claude_env.update(claude_config['env'])
             env_vars.update(claude_env)
         elif model_cli == 'codex':
             # Start with default Codex environment
@@ -171,8 +172,9 @@ def _run_ai_code_task_v2_internal(task_id: int, user_id: str, github_token: str)
                 'CODEX_NO_SANDBOX': '1'  # Another potential sandbox disable flag
             }
             # Merge with user's custom Codex environment variables
-            if user_preferences.get('codexCLI'):
-                codex_env.update(user_preferences['codexCLI'])
+            codex_config = user_preferences.get('codex', {})
+            if codex_config and codex_config.get('env'):
+                codex_env.update(codex_config['env'])
             env_vars.update(codex_env)
         
         # Use specialized container images based on model
@@ -210,25 +212,31 @@ def _run_ai_code_task_v2_internal(task_id: int, user_id: str, github_token: str)
             logger.info(f"🔍 Looking for Claude credentials in user preferences for task {task_id}")
             
             # Check if user has Claude credentials in their preferences
-            claude_preferences = user_preferences.get('claudeCode', {})
-            if claude_preferences and 'credentials' in claude_preferences:
+            claude_config = user_preferences.get('claudeCode', {})
+            credentials_json = claude_config.get('credentials') if claude_config else None
+            
+            # Check if credentials is meaningful (not empty object, null, undefined, or empty string)
+            has_meaningful_credentials = (
+                credentials_json is not None and 
+                credentials_json != {} and 
+                credentials_json != "" and
+                (isinstance(credentials_json, dict) and len(credentials_json) > 0)
+            )
+            
+            if has_meaningful_credentials:
                 try:
-                    credentials_json = claude_preferences['credentials']
-                    if credentials_json:
-                        # Convert JSON object to string for writing to container
-                        credentials_content = json.dumps(credentials_json)
-                        logger.info(f"📋 Successfully loaded Claude credentials from user preferences and stringified ({len(credentials_content)} characters) for task {task_id}")
-                        # Escape credentials content for shell
-                        escaped_credentials = credentials_content.replace("'", "'\"'\"'").replace('\n', '\\n')
-                        logger.info(f"📋 Credentials content escaped for shell injection")
-                    else:
-                        logger.warning(f"⚠️  Claude credentials field exists but is empty in user preferences for task {task_id}")
+                    # Convert JSON object to string for writing to container
+                    credentials_content = json.dumps(credentials_json)
+                    logger.info(f"📋 Successfully loaded Claude credentials from user preferences and stringified ({len(credentials_content)} characters) for task {task_id}")
+                    # Escape credentials content for shell
+                    escaped_credentials = credentials_content.replace("'", "'\"'\"'").replace('\n', '\\n')
+                    logger.info(f"📋 Credentials content escaped for shell injection")
                 except Exception as e:
                     logger.error(f"❌ Failed to process Claude credentials from user preferences: {e}")
                     credentials_content = ""
                     escaped_credentials = ""
             else:
-                logger.info(f"ℹ️  No Claude credentials found in user preferences for task {task_id} - skipping credentials setup")
+                logger.info(f"ℹ️  No meaningful Claude credentials found in user preferences for task {task_id} - skipping credentials setup (credentials: {credentials_json})")
         
         # Create the command to run in container (v2 function)
         container_command = f'''
