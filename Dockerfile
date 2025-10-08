@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     curl \
     vim
 
+RUN npm config set registry https://registry.npmmirror.com
 # Install claude-code globally
 RUN npm install -g @anthropic-ai/claude-code
 

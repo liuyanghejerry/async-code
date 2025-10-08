@@ -10,6 +10,7 @@ RUN apk add --no-cache \
     py3-pip \
     file
 
+RUN npm config set registry https://registry.npmmirror.com
 # Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 

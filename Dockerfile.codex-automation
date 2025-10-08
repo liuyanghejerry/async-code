@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     python3 \
     py3-pip
 
+RUN npm config set registry https://registry.npmmirror.com
 # Install Codex CLI globally
 # Requires Node.js 22+ according to their documentation
 RUN npm install -g @openai/codex

@@ -8,6 +8,7 @@ export NODE_ENV=${NODE_ENV:-development}
 
 # Install any additional dependencies if needed
 echo "📦 Installing dependencies..."
+npm config set registry https://registry.npmmirror.com
 npm install
 
 # Run any database migrations or setup commands here
@@ -32,4 +33,4 @@ else
     echo "⚠️  No dev or start script found in package.json"
     echo "🔧 Starting Node.js directly..."
     node server.js 2>/dev/null || node index.js 2>/dev/null || echo "❌ No entry point found"
-fi 
+fi
