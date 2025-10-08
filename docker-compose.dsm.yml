@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  frontend:
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/async-code-frontend:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  backend:
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/async-code-backend:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False # 生产环境关闭debug
+    env_file:
+      - .env # 确保环境变量文件存在
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    depends_on:
+      - claude-automation-build
+
+  claude-automation-build:
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/claude-code-automation:latest
+    command: ["echo", "Claude Code automation image built"]
+    restart: "no"
