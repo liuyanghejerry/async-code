@@ -1,4 +1,4 @@
-FROM node:20.9.0-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/jerry1123/node:20.9.0-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
