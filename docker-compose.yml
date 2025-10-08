@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/async-code-frontend:latest
     ports:
       - "3000:3000"
     environment:
@@ -19,6 +20,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/async-code-backend:latest
     ports:
       - "5000:5000"
     environment:
@@ -36,8 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.claude-automation
-      tags:
-        - claude-code-automation:latest
+    image: registry.cn-hangzhou.aliyuncs.com/jerry1123/claude-code-automation:latest
     command: ["echo", "Claude Code automation image built"]
 
 volumes:
